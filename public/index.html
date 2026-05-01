@@ -587,7 +587,8 @@
 
   function renderMd(text) {
     try {
-      return marked.parse(text, { breaks: true, gfm: true });
+      const clean = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+      return marked.parse(clean || text, { breaks: true, gfm: true });
     } catch {
       return escapeHtml(text).replace(/\n/g, '<br>');
     }
@@ -846,7 +847,7 @@
     }
 
     const p = state.providers[state.activeProvider];
-    if (!p || !p.baseUrl || (!p.token && !p.hasToken)) {
+    if (!p || !p.baseUrl) {
       showToast('Configure API in Settings first');
       openSettings();
       return;
