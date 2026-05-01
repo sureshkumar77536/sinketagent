@@ -625,6 +625,38 @@ io.on('connection', (socket) => {
   }
 });
 
+// ─── GitHub Webhook Auto-Update ───
+app.post('/api/webhook/update', (req, res) => {
+  res.json({ status: 'updating' });
+  const appDir = __dirname;
+  exec(`cd "${appDir}" && git pull origin $(git rev-parse --abbrev-ref HEAD) && npm install --production`, {
+    timeout: 60000
+  }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Auto-update failed:', error.message);
+      return;
+    }
+    console.log('Auto-update done:', stdout);
+    console.log('Restarting server...');
+    process.exit(0); // keep-alive script will restart
+  });
+});
+
+// ─── Manual Update Check ───
+app.get('/api/update', (req, res) => {
+  const appDir = __dirname;
+  exec(`cd "${appDir}" && git pull origin $(git rev-parse --abbrev-ref HEAD) && npm install --production`, {
+    timeout: 60000
+  }, (error, stdout, stderr) => {
+    if (error) {
+      res.json({ status: 'error', message: error.message });
+      return;
+    }
+    res.json({ status: 'updated', output: stdout });
+    setTimeout(() => process.exit(0), 1000); // restart after response
+  });
+});
+
 // ─── Keep Alive ───
 setInterval(() => {}, 30000);
 
