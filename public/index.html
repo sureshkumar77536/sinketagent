@@ -123,7 +123,7 @@
     .panel.active{display:flex}
 
     /* ── Chat Panel ── */
-    .chat-panel{flex:1;overflow:hidden;display:flex;flex-direction:column}
+    .chat-panel.active{flex:1;overflow:hidden;display:flex;flex-direction:column}
     .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
 
     .msg{display:flex;gap:10px}
@@ -430,6 +430,24 @@
     }
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+    .mobile-back{
+      display:none;position:fixed;top:8px;left:8px;z-index:95;
+      width:36px;height:36px;border-radius:999px;border:1px solid var(--glass-border);
+      background:rgba(0,0,0,.7);backdrop-filter:blur(12px);color:var(--text);
+      font-size:1.1rem;cursor:pointer;place-items:center;
+      box-shadow:0 2px 8px rgba(0,0,0,.5);
+    }
+    @media(max-width:768px){
+      .terminal-panel.active,.files-panel.active{
+        position:fixed;top:0;left:0;right:0;bottom:0;z-index:90;
+        display:flex;flex-direction:column;
+        background:var(--bg);
+      }
+      .terminal-panel.active{padding:0}
+      .terminal-panel.active .xterm{height:100%!important;width:100%!important}
+      .files-panel.active{padding:12px;padding-top:50px;overflow-y:auto}
+      .mobile-back.show{display:grid}
+    }
     @media(max-width:480px){
       .tab{padding:9px 14px;font-size:.78rem}
       .topbar{padding:10px 12px}
@@ -439,6 +457,7 @@
 </head>
 <body>
   <div class="toast" id="toast"></div>
+  <button class="mobile-back" id="mobileBack" aria-label="Back">&#8592;</button>
   <input type="file" id="imageInput" accept="image/*" style="display:none">
 
   <div class="app">
@@ -609,7 +628,25 @@
 
       if (tab.dataset.tab === 'terminal' && !state.terminalInit) initTerminal();
       if (tab.dataset.tab === 'files') loadFiles();
+
+      // Mobile: show back button for terminal/files
+      const isMobile = window.innerWidth <= 768;
+      const backBtn = $('mobileBack');
+      if (isMobile && (tab.dataset.tab === 'terminal' || tab.dataset.tab === 'files')) {
+        backBtn.classList.add('show');
+      } else {
+        backBtn.classList.remove('show');
+      }
     });
+  });
+
+  // Mobile back button → switch to chat
+  $('mobileBack').addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-tab="chat"]').classList.add('active');
+    document.querySelector('[data-panel="chat"]').classList.add('active');
+    $('mobileBack').classList.remove('show');
   });
 
   // ─── Settings ───
