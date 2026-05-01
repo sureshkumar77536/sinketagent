@@ -1,0 +1,8 @@
+node_modules/
+config.json
+uploads/
+workspace/
+*.log
+server.log
+tunnel.log
+.env

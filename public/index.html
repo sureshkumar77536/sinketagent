@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <title>Sinket Code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+  <style>
+    :root {
+      --bg:#171614;--bg-2:#11100f;--panel:#1d1b19;--panel-2:#24211f;--panel-3:#2c2926;
+      --text:#f1ece6;--muted:#b8afa7;--faint:#8a8179;
+      --line:rgba(255,255,255,.09);--line-2:rgba(255,255,255,.14);
+      --accent:#8b7cff;--accent-2:#6f86ff;--danger:#ff8f8f;--success:#7cff8b;
+      --shadow:0 24px 70px rgba(0,0,0,.36);
+      --safe-bottom:env(safe-area-inset-bottom,0px);
+      --transition:180ms cubic-bezier(.16,1,.3,1);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif}
+    body{background:radial-gradient(circle at top,rgba(139,124,255,.1),transparent 24%),linear-gradient(180deg,#191816,#121110 100%)}
+    button,input,textarea,select{font:inherit;color:var(--text)}
+    button{cursor:pointer}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+
+    .app{display:grid;grid-template-rows:auto auto 1fr auto;height:100vh;width:100%;max-width:100%;overflow:hidden}
+
+    /* ── Topbar ── */
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:rgba(23,22,20,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(18px);z-index:40}
+    .top-left,.top-right{display:flex;align-items:center;gap:8px}
+    .head-meta{min-width:0}
+    .head-title{font-size:.95rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .head-sub{font-size:.75rem;color:var(--faint)}
+
+    .icon-btn{
+      width:38px;height:38px;border-radius:999px;display:grid;place-items:center;
+      background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+      box-shadow:0 4px 8px rgba(0,0,0,.4),inset 0 1px 1px rgba(255,255,255,.15);
+      backdrop-filter:blur(10px);transition:all var(--transition)
+    }
+    .icon-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+    .icon-btn:active{transform:translateY(2px);box-shadow:inset 0 2px 6px rgba(0,0,0,.6)}
+
+    /* ── Tabs ── */
+    .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);background:rgba(23,22,20,.6);padding:0 14px}
+    .tab{padding:10px 18px;font-size:.82rem;font-weight:600;color:var(--faint);border:none;background:none;border-bottom:2px solid transparent;transition:all var(--transition)}
+    .tab:hover{color:var(--muted)}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+    /* ── Panels ── */
+    .panel{display:none;overflow:hidden;flex-direction:column}
+    .panel.active{display:flex}
+
+    /* ── Chat Panel ── */
+    .chat-panel{flex:1;overflow:hidden;display:flex;flex-direction:column}
+    .chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+
+    .msg{display:flex;gap:10px}
+    .msg.user{justify-content:flex-end}
+    .bubble{max-width:100%;border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.018));box-shadow:0 8px 24px rgba(0,0,0,.2);overflow:hidden}
+    .msg.user .bubble{max-width:min(86%,500px);border-bottom-right-radius:8px;background:linear-gradient(135deg,rgba(111,134,255,.24),rgba(139,124,255,.14))}
+    .bubble-inner{padding:12px 14px}
+    .bubble-text{font-size:.92rem;line-height:1.7;word-break:break-word}
+    .bubble-text p{margin:0 0 8px}
+    .bubble-text p:last-child{margin:0}
+    .bubble-text pre{margin:8px 0;padding:12px;border-radius:12px;overflow-x:auto;background:#141924;border:1px solid rgba(255,255,255,.06);color:#dfe6ff;font-family:'JetBrains Mono',monospace;font-size:.82rem;line-height:1.5}
+    .bubble-text code{font-family:'JetBrains Mono',monospace;font-size:.85em;padding:1px 5px;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
+    .bubble-text pre code{padding:0;border:none;background:none}
+    .bubble-text ul,.bubble-text ol{padding-left:20px;margin:6px 0}
+    .bubble-text li{margin:3px 0}
+    .bubble-text a{color:var(--accent-2);text-decoration:underline}
+
+    /* ── Tool Call Blocks ── */
+    .tool-block{margin:8px 0;border:1px solid var(--line-2);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02)}
+    .tool-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-size:.82rem;font-weight:600;color:var(--muted);transition:background var(--transition)}
+    .tool-header:hover{background:rgba(255,255,255,.03)}
+    .tool-icon{width:20px;height:20px;color:var(--accent)}
+    .tool-label{flex:1}
+    .tool-status{font-size:.75rem;padding:2px 8px;border-radius:999px;background:rgba(124,255,139,.12);color:var(--success);font-weight:500}
+    .tool-status.running{background:rgba(139,124,255,.15);color:var(--accent)}
+    .tool-chevron{transition:transform var(--transition)}
+    .tool-block.open .tool-chevron{transform:rotate(180deg)}
+    .tool-output{display:none;padding:0 12px 12px;max-height:300px;overflow-y:auto}
+    .tool-block.open .tool-output{display:block}
+    .tool-output pre{margin:0;padding:10px;border-radius:10px;background:#0d1117;color:#c9d1d9;font-family:'JetBrains Mono',monospace;font-size:.78rem;line-height:1.45;white-space:pre-wrap;word-break:break-all}
+
+    /* ── Thinking ── */
+    .thinking-block{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--muted);font-size:.82rem}
+    .dots{display:inline-flex;gap:4px}
+    .dot{width:6px;height:6px;border-radius:999px;background:var(--accent);animation:bounce .85s infinite alternate ease-in-out}
+    .dot:nth-child(2){animation-delay:.12s}
+    .dot:nth-child(3){animation-delay:.24s}
+    @keyframes bounce{from{opacity:.38;transform:translateY(0)}to{opacity:1;transform:translateY(-3px)}}
+
+    /* ── Composer ── */
+    .composer-wrap{padding:10px 12px calc(10px + var(--safe-bottom));background:linear-gradient(180deg,transparent 0%,rgba(18,17,16,.9) 30%,rgba(18,17,16,.98) 100%)}
+    .composer{display:flex;align-items:flex-end;gap:8px;background:rgba(40,37,35,.96);border:1px solid var(--line);border-radius:22px;padding:6px 8px}
+    .composer-left{display:flex;align-items:flex-end;gap:6px;flex:1;min-width:0}
+    .attach-btn{width:36px;height:36px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);flex-shrink:0}
+    .attach-btn:hover{background:rgba(255,255,255,.08)}
+    .composer textarea{flex:1;min-height:36px;max-height:140px;resize:none;border:none;outline:none;background:transparent;color:var(--text);line-height:1.5;padding:7px 4px;font-size:.9rem}
+    .send-btn{width:42px;height:42px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));border:1px solid rgba(255,255,255,.2);flex-shrink:0;transition:all var(--transition)}
+    .send-btn:hover{filter:brightness(1.1)}
+    .send-btn.stop{background:linear-gradient(135deg,#ff8e8e,#ff6a6a)}
+    .image-preview{display:none;padding:6px 12px 0;align-items:center;gap:8px}
+    .image-preview.show{display:flex}
+    .image-preview img{height:48px;border-radius:8px;border:1px solid var(--line)}
+    .image-preview .remove-img{width:20px;height:20px;border-radius:999px;background:var(--danger);border:none;display:grid;place-items:center;font-size:.7rem;color:#000}
+
+    /* ── Terminal Panel ── */
+    .terminal-panel{flex:1;overflow:hidden;padding:8px}
+    .terminal-panel .xterm{height:100%}
+
+    /* ── Files Panel ── */
+    .files-panel{flex:1;overflow-y:auto;padding:14px}
+    .file-breadcrumb{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;font-size:.8rem;color:var(--faint)}
+    .file-breadcrumb span{cursor:pointer;padding:2px 6px;border-radius:6px}
+    .file-breadcrumb span:hover{background:rgba(255,255,255,.06);color:var(--text)}
+    .file-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;cursor:pointer;transition:background var(--transition);border:1px solid transparent}
+    .file-item:hover{background:rgba(255,255,255,.04);border-color:var(--line)}
+    .file-item-icon{font-size:1.2rem}
+    .file-item-name{flex:1;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .file-item-size{font-size:.75rem;color:var(--faint)}
+    .file-viewer{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:none;place-items:center;z-index:100;padding:20px}
+    .file-viewer.open{display:grid}
+    .file-viewer-content{width:min(100%,800px);max-height:80vh;border-radius:20px;border:1px solid var(--line);background:#181715;overflow:hidden;display:grid;grid-template-rows:auto 1fr}
+    .file-viewer-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+    .file-viewer-header span{font-weight:600;font-size:.95rem}
+    .file-viewer-body{overflow:auto;padding:14px}
+    .file-viewer-body pre{margin:0;font-family:'JetBrains Mono',monospace;font-size:.82rem;line-height:1.5;color:#dfe6ff;white-space:pre-wrap}
+
+    /* ── Settings Drawer ── */
+    .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.56);backdrop-filter:blur(6px);display:none;z-index:100;place-items:start center}
+    .drawer-backdrop.open{display:grid}
+    .drawer{width:min(100%,520px);background:rgba(25,23,22,.98);border-bottom:1px solid var(--line);box-shadow:var(--shadow);padding:16px;transform:translateY(-18px);opacity:0;transition:transform var(--transition),opacity var(--transition);max-height:90vh;overflow-y:auto}
+    .drawer-backdrop.open .drawer{transform:translateY(0);opacity:1}
+    .drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .drawer-title{font-size:1.05rem;font-weight:700}
+    .drawer-section{margin-bottom:16px}
+    .drawer-section-title{font-size:.78rem;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+    .provider-card{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px;background:rgba(255,255,255,.02);transition:border-color var(--transition)}
+    .provider-card.active-provider{border-color:var(--accent)}
+    .provider-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .provider-card-name{font-weight:600;font-size:.9rem}
+    .provider-actions{display:flex;gap:6px}
+    .provider-actions button{padding:4px 10px;border-radius:8px;font-size:.75rem;border:1px solid var(--line);background:transparent}
+    .provider-actions button:hover{background:rgba(255,255,255,.06)}
+    .provider-actions .use-btn{border-color:var(--accent);color:var(--accent)}
+    .provider-actions .del-btn{border-color:var(--danger);color:var(--danger)}
+    .field{display:grid;gap:4px;margin-bottom:10px}
+    .field label{font-size:.8rem;color:var(--muted)}
+    .field input,.field select{width:100%;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:10px 12px;outline:none;font-size:.88rem}
+    .field input:focus{border-color:var(--accent)}
+    .add-provider-btn{width:100%;padding:10px;border-radius:12px;border:1px dashed var(--line-2);background:transparent;color:var(--faint);font-size:.85rem;transition:all var(--transition)}
+    .add-provider-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .drawer-footer{display:flex;gap:8px;margin-top:12px}
+    .drawer-footer button{flex:1;padding:10px;border-radius:14px;font-weight:600;font-size:.88rem}
+    .btn-secondary{background:transparent;border:1px solid var(--line);color:var(--text)}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none}
+
+    /* ── Toast ── */
+    .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-10px);opacity:0;padding:8px 14px;border-radius:999px;background:#2b2826;border:1px solid var(--line);color:var(--text);z-index:200;transition:all var(--transition);pointer-events:none;font-size:.85rem}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    @media(max-width:480px){
+      .tab{padding:8px 12px;font-size:.78rem}
+      .topbar{padding:8px 10px}
+    }
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast"></div>
+  <input type="file" id="imageInput" accept="image/*" style="display:none">
+
+  <div class="app">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="top-left">
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        </button>
+        <div class="head-meta">
+          <div class="head-title" id="modelTitle">Sinket Code</div>
+          <div class="head-sub" id="modelSub">Configure API in settings</div>
+        </div>
+      </div>
+      <div class="top-right">
+        <button class="icon-btn" id="retryBtn" aria-label="Retry">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>
+        </button>
+        <button class="icon-btn" id="newChatBtn" aria-label="New chat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="terminal">Terminal</button>
+      <button class="tab" data-tab="files">Files</button>
+    </div>
+
+    <!-- Panels -->
+    <div class="panel chat-panel active" data-panel="chat">
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg assistant">
+          <div class="bubble"><div class="bubble-inner">
+            <div class="bubble-text">
+              <p>Welcome to <strong>Sinket Code</strong>! I'm your AI coding assistant with full terminal access.</p>
+              <p>I can execute commands, write code, browse the web, and manage files on this server. Open <strong>Settings</strong> to configure your API provider, then start chatting!</p>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="image-preview" id="imagePreview">
+        <img id="previewImg" src="" alt="preview">
+        <button class="remove-img" id="removeImgBtn">&times;</button>
+      </div>
+      <div class="composer-wrap">
+        <div class="composer">
+          <div class="composer-left">
+            <button class="attach-btn" id="attachBtn" aria-label="Attach image">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <textarea id="promptInput" placeholder="Ask Sinket Code anything..." spellcheck="false" rows="1"></textarea>
+          </div>
+          <button class="send-btn" id="sendBtn" aria-label="Send">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel terminal-panel" data-panel="terminal" id="terminalPanel"></div>
+
+    <div class="panel files-panel" data-panel="files">
+      <div class="file-breadcrumb" id="fileBreadcrumb"></div>
+      <div id="fileList"></div>
+    </div>
+  </div>
+
+  <!-- Settings Drawer -->
+  <div class="drawer-backdrop" id="drawerWrap">
+    <div class="drawer">
+      <div class="drawer-head">
+        <div class="drawer-title">Settings</div>
+        <button class="icon-btn" id="closeDrawerBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-section-title">API Providers</div>
+        <div id="providerList"></div>
+        <button class="add-provider-btn" id="addProviderBtn">+ Add Provider</button>
+      </div>
+      <div class="drawer-footer">
+        <button class="btn-secondary" id="clearChatSettingsBtn">Clear Chat</button>
+        <button class="btn-primary" id="saveSettingsBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Viewer -->
+  <div class="file-viewer" id="fileViewer">
+    <div class="file-viewer-content">
+      <div class="file-viewer-header">
+        <span id="fileViewerName">file.txt</span>
+        <button class="icon-btn" id="closeFileViewer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="file-viewer-body"><pre id="fileViewerContent"></pre></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io@4.7.4/client-dist/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
+
+  <script>
+  // ─── State ───
+  const state = {
+    loading: false,
+    messages: [],
+    lastUserPrompt: '',
+    providers: [],
+    activeProvider: 0,
+    imageFile: null,
+    imageUrl: null,
+    currentFilePath: null,
+    terminalInit: false
+  };
+
+  // ─── DOM ───
+  const $ = id => document.getElementById(id);
+  const chatMessages = $('chatMessages');
+  const promptInput = $('promptInput');
+  const sendBtn = $('sendBtn');
+  const toast = $('toast');
+
+  // ─── Utils ───
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast.t);
+    showToast.t = setTimeout(() => toast.classList.remove('show'), 2000);
+  }
+
+  function scrollChat() {
+    chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderMd(text) {
+    try {
+      return marked.parse(text, { breaks: true, gfm: true });
+    } catch {
+      return escapeHtml(text).replace(/\n/g, '<br>');
+    }
+  }
+
+  function autoGrow() {
+    promptInput.style.height = '36px';
+    promptInput.style.height = Math.min(140, promptInput.scrollHeight) + 'px';
+  }
+
+  // ─── Tabs ───
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+
+      if (tab.dataset.tab === 'terminal' && !state.terminalInit) initTerminal();
+      if (tab.dataset.tab === 'files') loadFiles();
+    });
+  });
+
+  // ─── Settings ───
+  function openSettings() { $('drawerWrap').classList.add('open'); renderProviders(); }
+  function closeSettings() { $('drawerWrap').classList.remove('open'); }
+
+  $('settingsBtn').addEventListener('click', openSettings);
+  $('closeDrawerBtn').addEventListener('click', closeSettings);
+  $('drawerWrap').addEventListener('click', e => { if (e.target === $('drawerWrap')) closeSettings(); });
+
+  function renderProviders() {
+    const list = $('providerList');
+    list.innerHTML = '';
+    state.providers.forEach((p, i) => {
+      const card = document.createElement('div');
+      card.className = 'provider-card' + (i === state.activeProvider ? ' active-provider' : '');
+      card.innerHTML = `
+        <div class="provider-card-header">
+          <span class="provider-card-name">${escapeHtml(p.name || 'Provider ' + (i+1))}</span>
+          <div class="provider-actions">
+            <button class="use-btn" data-idx="${i}">Use</button>
+            <button class="del-btn" data-idx="${i}">&times;</button>
+          </div>
+        </div>
+        <div class="field"><label>Name</label><input type="text" value="${escapeHtml(p.name||'')}" data-field="name" data-idx="${i}" placeholder="My Provider"></div>
+        <div class="field"><label>Base URL</label><input type="text" value="${escapeHtml(p.baseUrl||'')}" data-field="baseUrl" data-idx="${i}" placeholder="https://api.openai.com/v1"></div>
+        <div class="field"><label>Model</label><input type="text" value="${escapeHtml(p.model||'')}" data-field="model" data-idx="${i}" placeholder="gpt-4"></div>
+        <div class="field"><label>API Token</label><input type="password" value="${escapeHtml(p.token||'')}" data-field="token" data-idx="${i}" placeholder="sk-..."></div>
+        <div class="field"><label>Streaming</label>
+          <select data-field="streaming" data-idx="${i}">
+            <option value="true" ${p.streaming!==false?'selected':''}>Yes</option>
+            <option value="false" ${p.streaming===false?'selected':''}>No</option>
+          </select>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll('.use-btn').forEach(btn => {
+      btn.addEventListener('click', () => { state.activeProvider = +btn.dataset.idx; renderProviders(); });
+    });
+    list.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.providers.splice(+btn.dataset.idx, 1);
+        if (state.activeProvider >= state.providers.length) state.activeProvider = Math.max(0, state.providers.length - 1);
+        renderProviders();
+      });
+    });
+    list.querySelectorAll('input, select').forEach(el => {
+      el.addEventListener('change', () => {
+        const idx = +el.dataset.idx;
+        const field = el.dataset.field;
+        let val = el.value;
+        if (field === 'streaming') val = val === 'true';
+        state.providers[idx][field] = val;
+      });
+    });
+  }
+
+  $('addProviderBtn').addEventListener('click', () => {
+    state.providers.push({ name: '', baseUrl: '', model: '', token: '', streaming: true });
+    renderProviders();
+  });
+
+  $('saveSettingsBtn').addEventListener('click', async () => {
+    // Sync all input values
+    $('providerList').querySelectorAll('input, select').forEach(el => {
+      const idx = +el.dataset.idx;
+      const field = el.dataset.field;
+      let val = el.value;
+      if (field === 'streaming') val = val === 'true';
+      if (state.providers[idx]) state.providers[idx][field] = val;
+    });
+
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providers: state.providers, activeProvider: state.activeProvider })
+    });
+    updateModelTitle();
+    closeSettings();
+    showToast('Settings saved');
+  });
+
+  $('clearChatSettingsBtn').addEventListener('click', () => {
+    state.messages = [];
+    chatMessages.innerHTML = `<div class="msg assistant"><div class="bubble"><div class="bubble-inner"><div class="bubble-text"><p>Chat cleared. Start fresh!</p></div></div></div></div>`;
+    closeSettings();
+    showToast('Chat cleared');
+  });
+
+  function updateModelTitle() {
+    const p = state.providers[state.activeProvider];
+    if (p) {
+      $('modelTitle').textContent = p.name || p.model || 'Sinket Code';
+      $('modelSub').textContent = p.model || 'Configure API in settings';
+    }
+  }
+
+  // ─── Load Config ───
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/config');
+      const data = await res.json();
+      if (data.providers) {
+        state.providers = data.providers.map(p => ({
+          name: p.name || '',
+          baseUrl: p.baseUrl || '',
+          model: p.model || '',
+          token: p.token || '',
+          streaming: p.streaming !== false,
+          hasToken: p.hasToken
+        }));
+      }
+      state.activeProvider = data.activeProvider || 0;
+      updateModelTitle();
+    } catch {}
+  }
+
+  // ─── Image Upload ───
+  $('attachBtn').addEventListener('click', () => $('imageInput').click());
+  $('imageInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    state.imageFile = file;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      $('previewImg').src = reader.result;
+      $('imagePreview').classList.add('show');
+    };
+    reader.readAsDataURL(file);
+
+    // Upload
+    const fd = new FormData();
+    fd.append('image', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      state.imageUrl = window.location.origin + data.url;
+    } catch {
+      showToast('Upload failed');
+    }
+  });
+  $('removeImgBtn').addEventListener('click', () => {
+    state.imageFile = null;
+    state.imageUrl = null;
+    $('imageInput').value = '';
+    $('imagePreview').classList.remove('show');
+  });
+
+  // ─── Chat ───
+  function addUserMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'msg user';
+    div.innerHTML = `<div class="bubble"><div class="bubble-inner"><div class="bubble-text">${renderMd(text)}</div></div></div>`;
+    chatMessages.appendChild(div);
+    scrollChat();
+  }
+
+  function createAssistantMsg() {
+    const div = document.createElement('div');
+    div.className = 'msg assistant';
+    div.innerHTML = `<div class="bubble"><div class="bubble-inner"></div></div>`;
+    chatMessages.appendChild(div);
+    return div.querySelector('.bubble-inner');
+  }
+
+  function addThinking(container) {
+    const el = document.createElement('div');
+    el.className = 'thinking-block';
+    el.innerHTML = `<span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span><span>Thinking...</span>`;
+    container.appendChild(el);
+    scrollChat();
+    return el;
+  }
+
+  function addToolBlock(container, name, args) {
+    const labels = {
+      execute_command: 'Running command',
+      read_file: 'Reading file',
+      write_file: 'Writing file',
+      browse_url: 'Browsing URL',
+      list_files: 'Listing files'
+    };
+    const icons = {
+      execute_command: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+      read_file: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      write_file: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      browse_url: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+      list_files: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
+    };
+
+    const detail = args.command || args.path || args.url || '';
+    const block = document.createElement('div');
+    block.className = 'tool-block';
+    block.innerHTML = `
+      <div class="tool-header">
+        <span class="tool-icon">${icons[name]||''}</span>
+        <span class="tool-label">${labels[name]||name}: <code>${escapeHtml(detail.substring(0,80))}</code></span>
+        <span class="tool-status running">running</span>
+        <svg class="tool-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="tool-output"><pre>Executing...</pre></div>
+    `;
+    block.querySelector('.tool-header').addEventListener('click', () => block.classList.toggle('open'));
+    container.appendChild(block);
+    scrollChat();
+    return block;
+  }
+
+  function setToolResult(block, output) {
+    const statusEl = block.querySelector('.tool-status');
+    statusEl.textContent = 'done';
+    statusEl.classList.remove('running');
+    block.querySelector('.tool-output pre').textContent = output;
+    block.classList.add('open');
+    scrollChat();
+  }
+
+  function setLoading(loading) {
+    state.loading = loading;
+    sendBtn.classList.toggle('stop', loading);
+    sendBtn.innerHTML = loading
+      ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>`;
+  }
+
+  let abortController = null;
+
+  async function sendChat(prompt, isRetry = false) {
+    if (state.loading) {
+      if (abortController) abortController.abort();
+      return;
+    }
+
+    const p = state.providers[state.activeProvider];
+    if (!p || !p.baseUrl || (!p.token && !p.hasToken)) {
+      showToast('Configure API in Settings first');
+      openSettings();
+      return;
+    }
+    if (!prompt) return;
+
+    if (!isRetry) {
+      state.lastUserPrompt = prompt;
+      state.messages.push({ role: 'user', content: prompt });
+      addUserMsg(prompt);
+    }
+
+    const container = createAssistantMsg();
+    let thinkingEl = addThinking(container);
+    let textContent = '';
+    let textEl = null;
+    let currentToolBlock = null;
+
+    abortController = new AbortController();
+    setLoading(true);
+
+    try {
+      const body = {
+        messages: state.messages.slice(),
+        imageUrl: state.imageUrl || undefined
+      };
+      state.imageUrl = null;
+      state.imageFile = null;
+      $('imageInput').value = '';
+      $('imagePreview').classList.remove('show');
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: abortController.signal
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const eventStr of events) {
+          const lines = eventStr.split('\n');
+          let eventType = '';
+          let eventData = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7);
+            else if (line.startsWith('data: ')) eventData = line.slice(6);
+          }
+
+          if (!eventType || !eventData) continue;
+
+          try {
+            const data = JSON.parse(eventData);
+
+            switch (eventType) {
+              case 'status':
+                break;
+
+              case 'content':
+                if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+                if (!textEl) {
+                  textEl = document.createElement('div');
+                  textEl.className = 'bubble-text';
+                  container.appendChild(textEl);
+                }
+                textContent += data.text;
+                textEl.innerHTML = renderMd(textContent);
+                scrollChat();
+                break;
+
+              case 'tool_start':
+                if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+                currentToolBlock = addToolBlock(container, data.name, data.args);
+                // reset textEl for content after tool
+                textEl = null;
+                textContent = '';
+                break;
+
+              case 'tool_result':
+                if (currentToolBlock) setToolResult(currentToolBlock, data.output);
+                currentToolBlock = null;
+                thinkingEl = addThinking(container);
+                break;
+
+              case 'error':
+                if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+                const errEl = document.createElement('div');
+                errEl.className = 'bubble-text';
+                errEl.innerHTML = `<p style="color:var(--danger)">${escapeHtml(data.message)}</p>`;
+                container.appendChild(errEl);
+                scrollChat();
+                break;
+
+              case 'done':
+                if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+                break;
+            }
+          } catch {}
+        }
+      }
+
+      if (textContent) {
+        state.messages.push({ role: 'assistant', content: textContent });
+      }
+
+    } catch (err) {
+      if (thinkingEl) thinkingEl.remove();
+      if (err.name !== 'AbortError') {
+        const errEl = document.createElement('div');
+        errEl.className = 'bubble-text';
+        errEl.innerHTML = `<p style="color:var(--danger)">Error: ${escapeHtml(err.message)}</p>`;
+        container.appendChild(errEl);
+      }
+    } finally {
+      abortController = null;
+      setLoading(false);
+    }
+  }
+
+  // ─── Input Handlers ───
+  promptInput.addEventListener('input', autoGrow);
+  promptInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChat(promptInput.value.trim());
+      promptInput.value = '';
+      autoGrow();
+    }
+  });
+  sendBtn.addEventListener('click', () => {
+    if (state.loading) { if (abortController) abortController.abort(); return; }
+    sendChat(promptInput.value.trim());
+    promptInput.value = '';
+    autoGrow();
+  });
+  $('retryBtn').addEventListener('click', () => {
+    if (!state.lastUserPrompt) { showToast('No previous message'); return; }
+    sendChat(state.lastUserPrompt, true);
+  });
+  $('newChatBtn').addEventListener('click', () => {
+    state.messages = [];
+    chatMessages.innerHTML = `<div class="msg assistant"><div class="bubble"><div class="bubble-inner"><div class="bubble-text"><p>New chat started. Ask me anything!</p></div></div></div></div>`;
+    showToast('New chat');
+  });
+
+  // ─── Terminal ───
+  let term, socket;
+  function initTerminal() {
+    state.terminalInit = true;
+    term = new Terminal({
+      theme: {
+        background: '#11100f',
+        foreground: '#f1ece6',
+        cursor: '#8b7cff',
+        cursorAccent: '#11100f',
+        selectionBackground: 'rgba(139,124,255,0.3)'
+      },
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: 14,
+      cursorBlink: true,
+      scrollback: 5000
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open($('terminalPanel'));
+    fitAddon.fit();
+
+    socket = io();
+    term.onData(data => socket.emit('input', data));
+    socket.on('output', data => term.write(data));
+
+    window.addEventListener('resize', () => {
+      fitAddon.fit();
+      socket.emit('resize', { cols: term.cols, rows: term.rows });
+    });
+
+    new MutationObserver(() => {
+      if ($('terminalPanel').classList.contains('active')) {
+        fitAddon.fit();
+        socket.emit('resize', { cols: term.cols, rows: term.rows });
+      }
+    }).observe($('terminalPanel'), { attributes: true });
+  }
+
+  // ─── Files ───
+  let currentDir = null;
+
+  async function loadFiles(dirPath) {
+    try {
+      const url = '/api/files' + (dirPath ? `?path=${encodeURIComponent(dirPath)}` : '');
+      const res = await fetch(url);
+      const data = await res.json();
+      currentDir = data.path;
+      renderBreadcrumb(data.path);
+      renderFiles(data.items);
+    } catch (e) {
+      showToast('Failed to load files');
+    }
+  }
+
+  function renderBreadcrumb(p) {
+    const bc = $('fileBreadcrumb');
+    const parts = p.split('/').filter(Boolean);
+    bc.innerHTML = '';
+    let accumulated = '/';
+    parts.forEach((part, i) => {
+      accumulated += part + '/';
+      const span = document.createElement('span');
+      span.textContent = i === 0 ? '/' + part : part;
+      const pathCopy = accumulated;
+      span.addEventListener('click', () => loadFiles(pathCopy));
+      bc.appendChild(span);
+      if (i < parts.length - 1) {
+        const sep = document.createElement('span');
+        sep.textContent = '/';
+        sep.style.color = 'var(--faint)';
+        bc.appendChild(sep);
+      }
+    });
+  }
+
+  function renderFiles(items) {
+    const list = $('fileList');
+    list.innerHTML = '';
+
+    if (currentDir !== '/') {
+      const upItem = document.createElement('div');
+      upItem.className = 'file-item';
+      upItem.innerHTML = `<span class="file-item-icon">📁</span><span class="file-item-name">..</span>`;
+      upItem.addEventListener('click', () => {
+        const parent = currentDir.split('/').slice(0, -1).join('/') || '/';
+        loadFiles(parent);
+      });
+      list.appendChild(upItem);
+    }
+
+    items.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'file-item';
+      const icon = item.type === 'directory' ? '📁' : '📄';
+      const size = item.size != null ? formatSize(item.size) : '';
+      el.innerHTML = `<span class="file-item-icon">${icon}</span><span class="file-item-name">${escapeHtml(item.name)}</span><span class="file-item-size">${size}</span>`;
+      el.addEventListener('click', () => {
+        if (item.type === 'directory') loadFiles(item.path);
+        else viewFile(item.path, item.name);
+      });
+      list.appendChild(el);
+    });
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  async function viewFile(filePath, name) {
+    try {
+      const res = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (data.error) { showToast(data.error); return; }
+      $('fileViewerName').textContent = name;
+      $('fileViewerContent').textContent = data.content;
+      $('fileViewer').classList.add('open');
+    } catch { showToast('Failed to read file'); }
+  }
+
+  $('closeFileViewer').addEventListener('click', () => $('fileViewer').classList.remove('open'));
+  $('fileViewer').addEventListener('click', e => { if (e.target === $('fileViewer')) $('fileViewer').classList.remove('open'); });
+
+  // ─── Init ───
+  loadConfig();
+  autoGrow();
+  </script>
+</body>
+</html>
