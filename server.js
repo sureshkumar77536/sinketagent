@@ -191,9 +191,25 @@ app.delete('/api/chats/:id', (req, res) => {
 
 // ─── Tunnel URL API ───
 app.get('/api/tunnel', (req, res) => {
-  const url = tunnelDB.get('url', '');
-  const lastUpdate = tunnelDB.get('lastUpdate', null);
-  res.json({ url, lastUpdate });
+  // Re-read from disk since start.sh writes the file after server starts
+  const tunnelPath = path.join(DATA_DIR, 'tunnel.json');
+  try {
+    if (fs.existsSync(tunnelPath)) {
+      const data = JSON.parse(fs.readFileSync(tunnelPath, 'utf-8'));
+      res.json({ url: data.url || '', lastUpdate: data.lastUpdate || null });
+      return;
+    }
+  } catch {}
+  res.json({ url: '', lastUpdate: null });
+});
+
+app.post('/api/tunnel', (req, res) => {
+  const { url } = req.body;
+  if (url) {
+    tunnelDB.set('url', url);
+    tunnelDB.set('lastUpdate', Date.now());
+  }
+  res.json({ ok: true });
 });
 
 // ─── AI Files Tracking ───
@@ -414,7 +430,7 @@ app.post('/api/chat', async (req, res) => {
   const allMessages = [
     { role: 'system', content: SYSTEM_PROMPT },
     ...FEW_SHOT_EXAMPLES,
-    ...messages
+    ...messages.map(m => ({ ...m }))
   ];
 
   if (imageUrl) {
@@ -473,12 +489,13 @@ app.post('/api/chat', async (req, res) => {
         if (loopCount === 1 && !toolsFallbackMode && apiBody.tools) {
           toolsFallbackMode = true;
           allMessages.length = 0;
-          allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages);
+          allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages.map(m => ({ ...m })));
           if (imageUrl) {
             const lastMsg = allMessages[allMessages.length - 1];
             if (lastMsg.role === 'user') {
+              const textContent = typeof lastMsg.content === 'string' ? lastMsg.content : (Array.isArray(lastMsg.content) ? (lastMsg.content.find(c => c.type === 'text')?.text || '') : '');
               lastMsg.content = [
-                { type: 'text', text: typeof lastMsg.content === 'string' ? lastMsg.content : '' },
+                { type: 'text', text: textContent },
                 { type: 'image_url', image_url: { url: imageUrl } }
               ];
             }
@@ -583,12 +600,13 @@ app.post('/api/chat', async (req, res) => {
           if (loopCount === 1 && !toolsFallbackMode && apiBody.tools) {
             toolsFallbackMode = true;
             allMessages.length = 0;
-            allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages);
+            allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages.map(m => ({ ...m })));
             if (imageUrl) {
               const lastMsg = allMessages[allMessages.length - 1];
               if (lastMsg.role === 'user') {
+                const txt = typeof lastMsg.content === 'string' ? lastMsg.content : (Array.isArray(lastMsg.content) ? (lastMsg.content.find(c => c.type === 'text')?.text || '') : '');
                 lastMsg.content = [
-                  { type: 'text', text: typeof lastMsg.content === 'string' ? lastMsg.content : '' },
+                  { type: 'text', text: txt },
                   { type: 'image_url', image_url: { url: imageUrl } }
                 ];
               }
