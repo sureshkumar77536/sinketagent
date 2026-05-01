@@ -251,23 +251,52 @@ const AI_TOOLS = [
   }
 ];
 
-const SYSTEM_PROMPT = `You are Sinket Code — a powerful AI coding assistant with FULL terminal/shell access on this server.
+const SYSTEM_PROMPT = `You are Sinket Code, an AI coding assistant integrated into a server environment with full shell access.
 
-You can:
-1. Execute ANY shell command (install packages, run scripts, manage files, etc.)
-2. Read and write files on the server
-3. Browse URLs and fetch web content
-4. Create, compile, and run code
+You have direct access to the server's terminal. You execute commands by outputting tool calls in a special format.
 
-IMPORTANT RULES:
-- You HAVE terminal access. Use your tools to execute commands when needed.
-- When the user asks to install something, run a command, or do any system task — DO IT using execute_command.
-- Show your work: explain what you're doing and why.
-- Be proactive: if a task requires multiple steps, execute them one by one.
-- For coding tasks: write the code, save it to a file, and optionally run it.
-- Keep responses focused and technical.
-- When showing code, use markdown code blocks.
+To execute a tool, output this exact XML format in your response:
+
+<tool_call>
+{"name": "TOOL_NAME", "arguments": {"key": "value"}}
+</tool_call>
+
+Available tools:
+1. execute_command - Run any shell command. Args: {"command": "shell command here"}
+2. read_file - Read a file. Args: {"path": "file path"}
+3. write_file - Write/create a file. Args: {"path": "file path", "content": "file content"}
+4. browse_url - Fetch a webpage. Args: {"url": "https://..."}
+5. list_files - List directory contents. Args: {"path": "directory path"}
+
+CRITICAL RULES:
+- When asked to run a command, ALWAYS output a <tool_call> block. The system will execute it and return the result.
+- NEVER say "I cannot execute commands" or "I don't have access" — you DO have access through <tool_call>.
+- You can explain what you're doing alongside the tool call.
 - The workspace directory is: ${WORKSPACE}`;
+
+const FEW_SHOT_EXAMPLES = [
+  { role: 'user', content: 'Show me what files are in the current directory' },
+  { role: 'assistant', content: 'I\'ll list the files in the current directory for you.\n\n<tool_call>\n{"name": "execute_command", "arguments": {"command": "ls -la"}}\n</tool_call>' },
+  { role: 'user', content: '[Tool Result for execute_command]:\ntotal 48\ndrwxr-xr-x 4 root root 4096 May 1 10:00 .\ndrwxr-xr-x 3 root root 4096 May 1 09:55 ..\n-rw-r--r-- 1 root root  220 May 1 09:55 .bashrc\n-rw-r--r-- 1 root root 1200 May 1 10:00 server.js\ndrwxr-xr-x 2 root root 4096 May 1 10:00 public' },
+  { role: 'assistant', content: 'Here are the files in the current directory:\n\n- `.bashrc` — Shell configuration file\n- `server.js` — Main server file (1.2 KB)\n- `public/` — Public directory\n\nThe directory contains a Node.js project setup. Would you like me to look at any of these files?' }
+];
+
+function parseTextToolCalls(text) {
+  const calls = [];
+  const regex = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      calls.push({
+        name: parsed.name,
+        arguments: parsed.arguments || parsed.args || {},
+        rawMatch: match[0]
+      });
+    } catch {}
+  }
+  return calls;
+}
 
 // ─── Chat API with Agent Loop (SSE) ───
 app.post('/api/chat', async (req, res) => {
@@ -275,7 +304,7 @@ app.post('/api/chat', async (req, res) => {
   const cfg = loadConfig();
   const provider = cfg.providers[cfg.activeProvider || 0];
 
-  if (!provider || !provider.token) {
+  if (!provider || !provider.baseUrl) {
     res.status(400).json({ error: 'No API provider configured. Go to Settings.' });
     return;
   }
@@ -293,6 +322,7 @@ app.post('/api/chat', async (req, res) => {
 
   const allMessages = [
     { role: 'system', content: SYSTEM_PROMPT },
+    ...FEW_SHOT_EXAMPLES,
     ...messages
   ];
 
@@ -308,13 +338,13 @@ app.post('/api/chat', async (req, res) => {
 
   let loopCount = 0;
   const MAX_LOOPS = 15;
+  let toolsFallbackMode = false;
 
   try {
     while (loopCount < MAX_LOOPS) {
       loopCount++;
       sendEvent('status', { type: 'thinking' });
 
-      const useTools = config.terminalAccess !== false;
       const apiBody = {
         model: provider.model,
         messages: allMessages,
@@ -323,7 +353,8 @@ app.post('/api/chat', async (req, res) => {
         stream: provider.streaming !== false
       };
 
-      if (useTools) {
+      // Send native tools only on first attempt if not flagged
+      if (config.terminalAccess !== false && loopCount === 1 && !toolsFallbackMode) {
         apiBody.tools = AI_TOOLS;
         apiBody.tool_choice = 'auto';
       }
@@ -331,12 +362,12 @@ app.post('/api/chat', async (req, res) => {
       const baseUrl = provider.baseUrl.replace(/\/+$/, '');
       const url = `${baseUrl}/chat/completions`;
 
+      const headers = { 'Content-Type': 'application/json' };
+      if (provider.token) headers['Authorization'] = `Bearer ${provider.token}`;
+
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${provider.token}`
-        },
+        headers,
         body: JSON.stringify(apiBody)
       });
 
@@ -422,7 +453,41 @@ app.post('/api/chat', async (req, res) => {
           continue;
         }
 
+        // ─── Fallback: parse text-based tool calls ───
         if (textContent) {
+          const textCalls = parseTextToolCalls(textContent);
+          if (textCalls.length > 0) {
+            const cleanText = textContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+            allMessages.push({ role: 'assistant', content: cleanText || null });
+            for (const tc of textCalls) {
+              sendEvent('tool_start', { name: tc.name, args: tc.arguments });
+              const result = await executeTool(tc.name, tc.arguments);
+              sendEvent('tool_result', { name: tc.name, output: result });
+              allMessages.push({ role: 'user', content: `[Tool Result for ${tc.name}]:\n${result}` });
+            }
+            continue;
+          }
+
+          // Detect: native tools sent but model didn't use them → retry in fallback mode
+          if (loopCount === 1 && !toolsFallbackMode && apiBody.tools) {
+            toolsFallbackMode = true;
+            allMessages.pop(); // remove the system prompt re-add
+            // Reset messages to original + strip the failed assistant response
+            allMessages.length = 0;
+            allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages);
+            if (imageUrl) {
+              const lastMsg = allMessages[allMessages.length - 1];
+              if (lastMsg.role === 'user') {
+                lastMsg.content = [
+                  { type: 'text', text: typeof lastMsg.content === 'string' ? lastMsg.content : '' },
+                  { type: 'image_url', image_url: { url: imageUrl } }
+                ];
+              }
+            }
+            loopCount = 0;
+            continue;
+          }
+
           allMessages.push({ role: 'assistant', content: textContent });
         }
         break;
@@ -432,7 +497,7 @@ app.post('/api/chat', async (req, res) => {
         const json = await response.json();
         const choice = json.choices?.[0];
 
-        if (choice?.message?.tool_calls) {
+        if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
           allMessages.push(choice.message);
           for (const tc of choice.message.tool_calls) {
             let args = {};
@@ -446,8 +511,22 @@ app.post('/api/chat', async (req, res) => {
         }
 
         if (choice?.message?.content) {
-          sendEvent('content', { text: choice.message.content });
-          allMessages.push({ role: 'assistant', content: choice.message.content });
+          const msgText = choice.message.content;
+          sendEvent('content', { text: msgText });
+
+          const textCalls = parseTextToolCalls(msgText);
+          if (textCalls.length > 0) {
+            const cleanText = msgText.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+            allMessages.push({ role: 'assistant', content: cleanText || null });
+            for (const tc of textCalls) {
+              sendEvent('tool_start', { name: tc.name, args: tc.arguments });
+              const result = await executeTool(tc.name, tc.arguments);
+              sendEvent('tool_result', { name: tc.name, output: result });
+              allMessages.push({ role: 'user', content: `[Tool Result for ${tc.name}]:\n${result}` });
+            }
+            continue;
+          }
+          allMessages.push({ role: 'assistant', content: msgText });
         }
         break;
       }

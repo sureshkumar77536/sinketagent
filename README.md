@@ -30,17 +30,17 @@ Sinket Code is a powerful AI-powered tool that runs on your VPS. It connects to 
 ### One-Line Install
 
 ```bash
-git clone https://github.com/sureshkumar77536/sinket-code.git && cd sinket-code && bash setup.sh
+git clone https://github.com/sureshkumar77536/sinketagent.git && cd sinketagent && bash setup.sh
 ```
 
 ### Step by Step
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/sureshkumar77536/sinket-code.git
+git clone https://github.com/sureshkumar77536/sinketagent.git
 
 # 2. Go to directory
-cd sinket-code
+cd sinketagent
 
 # 3. Run setup
 bash setup.sh
@@ -134,7 +134,7 @@ Click the **☰ Settings** button in the top-left to:
 ## 🏗️ Architecture
 
 ```
-sinket-code/
+sinketagent/
 ├── server.js          # Express backend (API proxy, terminal, file browser)
 ├── public/
 │   └── index.html     # Frontend (chat, terminal, files, settings)
@@ -177,7 +177,7 @@ Any OpenAI-compatible API works:
 ## 🔄 Update
 
 ```bash
-cd sinket-code
+cd sinketagent
 ./stop.sh
 git pull
 npm install
