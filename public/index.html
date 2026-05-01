@@ -13,7 +13,7 @@
       --text:#f1ece6;--muted:#b8afa7;--faint:#8a8179;
       --line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.13);
       --accent:#8b7cff;--accent-2:#6f86ff;--accent-glow:rgba(139,124,255,.35);
-      --danger:#ff8f8f;--success:#7cff8b;
+      --danger:#ff8f8f;--success:#7cff8b; --warning:#ffbd2e; --error-mac:#ff5f56;
       --glass-bg:rgba(255,255,255,.04);--glass-border:rgba(255,255,255,.1);
       --glass-highlight:rgba(255,255,255,.18);--glass-shadow:rgba(0,0,0,.5);
       --shadow-sm:0 4px 12px rgba(0,0,0,.3);
@@ -291,20 +291,128 @@
     .image-preview img{height:52px;border-radius:12px;border:1px solid var(--glass-border);box-shadow:var(--shadow-sm)}
     .image-preview .remove-img{width:22px;height:22px;border-radius:999px;background:var(--danger);border:none;display:grid;place-items:center;font-size:.75rem;color:#000;box-shadow:var(--shadow-sm)}
 
-    /* ── Terminal Panel ── */
-    .terminal-panel{flex:1;overflow:hidden;padding:10px;background:linear-gradient(180deg,rgba(10,9,8,.5),rgba(8,7,6,.8))}
-    .terminal-panel .xterm{height:100%}
+    /* ── Terminal Panel (Updated 3D Mac UI) ── */
+    .terminal-panel{
+      flex:1;overflow:hidden;padding:12px;
+      background:linear-gradient(180deg,rgba(10,9,8,.5),rgba(8,7,6,.8));
+      display:flex;flex-direction:column;
+    }
+    .term-window {
+      flex:1; display:flex; flex-direction:column;
+      background: linear-gradient(180deg, #181818 0%, #111111 100%);
+      border-radius: 12px;
+      border: 1px solid var(--line-2);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+    .mac-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(30, 30, 30, 0.95);
+      border-bottom: 1px solid var(--line);
+    }
+    .mac-dots { display: flex; gap: 8px; }
+    .mac-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.4);
+    }
+    .mac-dot.close { background: var(--error-mac); border: 1px solid #e0443e; }
+    .mac-dot.min { background: var(--warning); border: 1px solid #dea123; }
+    .mac-dot.max { background: var(--success); border: 1px solid #1aab29; }
+    
+    .mac-title {
+      font-size: 0.85rem; font-weight: 600; color: var(--muted);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mac-status {
+      display: flex; align-items: center; gap: 4px; color: var(--faint); font-size: 0.75rem;
+    }
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+    .mac-actions { display: flex; gap: 12px; color: var(--faint); }
+    .mac-actions svg { cursor: pointer; transition: color 0.2s; }
+    .mac-actions svg:hover { color: var(--text); }
 
-    /* ── Files Panel ── */
-    .files-panel{flex:1;overflow-y:auto;padding:16px}
+    .sys-info-bar {
+      padding: 16px; border-bottom: 1px solid var(--line);
+      background: rgba(20, 20, 20, 0.5);
+    }
+    .sys-header {
+      font-size: 0.7rem; font-weight: 700; color: var(--faint);
+      letter-spacing: 0.1em; margin-bottom: 12px; display: flex; justify-content: space-between;
+    }
+    .sys-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    .sys-item { display: flex; flex-direction: column; gap: 6px; }
+    .sys-item-top {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.75rem; color: var(--muted);
+    }
+    .sys-item-top svg { color: var(--faint); }
+    .sys-label-wrap { display: flex; align-items: center; gap: 6px; }
+    .progress-track {
+      height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 4px; }
+    .progress-fill.green { background: var(--success); }
+    .progress-fill.yellow { background: var(--warning); }
+    
+    .term-content-wrap {
+      flex: 1; padding: 12px 16px; background: #111111; overflow: hidden;
+    }
+    .term-content-wrap .xterm { height: 100%; width: 100%; }
+
+    /* ── Files Panel (Updated Workspace UI) ── */
+    .files-panel{
+      flex:1;overflow:hidden;padding:12px;
+      display:flex;flex-direction:column;
+    }
+    .workspace-window {
+      flex:1; display:flex; flex-direction:column;
+      background: linear-gradient(180deg, #1c1c1c 0%, #141414 100%);
+      border-radius: 12px;
+      border: 1px solid var(--line-2);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+      overflow: hidden;
+    }
+    .ws-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px; border-bottom: 1px solid var(--line);
+      background: rgba(30, 30, 30, 0.6);
+    }
+    .ws-title-wrap {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .ws-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(139,124,255,0.15); border: 1px solid rgba(139,124,255,0.3);
+      display: grid; place-items: center; color: var(--accent);
+    }
+    .ws-titles h2 { font-size: 0.95rem; font-weight: 600; margin: 0 0 2px; }
+    .ws-titles p { font-size: 0.75rem; color: var(--faint); margin: 0; }
+    
+    .ws-files-section {
+      padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .ws-files-title {
+      font-size: 0.7rem; font-weight: 700; color: var(--faint); letter-spacing: 0.05em;
+      margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .ws-files-title .actions { display: flex; gap: 10px; }
+    .ws-files-title .actions svg { cursor: pointer; transition: 0.2s; }
+    .ws-files-title .actions svg:hover { color: var(--text); }
+    
     .file-breadcrumb{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;font-size:.8rem;color:var(--faint)}
     .file-breadcrumb span{cursor:pointer;padding:3px 8px;border-radius:8px;transition:all var(--transition)}
     .file-breadcrumb span:hover{background:rgba(255,255,255,.07);color:var(--text)}
+    
     .file-item{
-      display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:16px;
+      display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;
       cursor:pointer;transition:all var(--transition);
-      border:1px solid transparent;
-      background:transparent;
+      border:1px solid transparent; background:transparent; margin-bottom: 2px;
     }
     .file-item:hover{
       background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
@@ -316,20 +424,6 @@
     .file-item-icon{font-size:1.3rem;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
     .file-item-name{flex:1;font-size:.88rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .file-item-size{font-size:.72rem;color:var(--faint);font-weight:500}
-
-    .file-viewer{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(12px);display:none;place-items:center;z-index:100;padding:20px}
-    .file-viewer.open{display:grid}
-    .file-viewer-content{
-      width:min(100%,800px);max-height:80vh;border-radius:24px;overflow:hidden;
-      background:linear-gradient(180deg,rgba(26,24,22,.98),rgba(20,18,16,.98));
-      border:1px solid var(--glass-border);
-      box-shadow:var(--shadow-lg),inset 0 1px 0 rgba(255,255,255,.08);
-      display:grid;grid-template-rows:auto 1fr;
-    }
-    .file-viewer-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
-    .file-viewer-header span{font-weight:700;font-size:.95rem}
-    .file-viewer-body{overflow:auto;padding:16px}
-    .file-viewer-body pre{margin:0;font-family:'JetBrains Mono',monospace;font-size:.82rem;line-height:1.55;color:#dfe6ff;white-space:pre-wrap}
 
     /* ── Settings Drawer ── */
     .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(10px);display:none;z-index:100;place-items:start center}
@@ -430,6 +524,20 @@
     }
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+    .file-viewer{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(12px);display:none;place-items:center;z-index:100;padding:20px}
+    .file-viewer.open{display:grid}
+    .file-viewer-content{
+      width:min(100%,800px);max-height:80vh;border-radius:24px;overflow:hidden;
+      background:linear-gradient(180deg,rgba(26,24,22,.98),rgba(20,18,16,.98));
+      border:1px solid var(--glass-border);
+      box-shadow:var(--shadow-lg),inset 0 1px 0 rgba(255,255,255,.08);
+      display:grid;grid-template-rows:auto 1fr;
+    }
+    .file-viewer-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+    .file-viewer-header span{font-weight:700;font-size:.95rem}
+    .file-viewer-body{overflow:auto;padding:16px}
+    .file-viewer-body pre{margin:0;font-family:'JetBrains Mono',monospace;font-size:.82rem;line-height:1.55;color:#dfe6ff;white-space:pre-wrap}
+
     .mobile-back{
       display:none;position:fixed;top:8px;left:8px;z-index:95;
       width:36px;height:36px;border-radius:999px;border:1px solid var(--glass-border);
@@ -447,6 +555,7 @@
       .terminal-panel.active .xterm{height:100%!important;width:100%!important}
       .files-panel.active{padding:12px;padding-top:50px;overflow-y:auto}
       .mobile-back.show{display:grid}
+      .sys-grid { grid-template-columns: 1fr; gap: 12px; }
     }
     @media(max-width:480px){
       .tab{padding:9px 14px;font-size:.78rem}
@@ -461,7 +570,6 @@
   <input type="file" id="imageInput" accept="image/*" style="display:none">
 
   <div class="app">
-    <!-- Topbar -->
     <header class="topbar">
       <div class="top-left">
         <button class="icon-btn" id="settingsBtn" aria-label="Settings">
@@ -482,14 +590,12 @@
       </div>
     </header>
 
-    <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="chat">Chat</button>
       <button class="tab" data-tab="terminal">Terminal</button>
       <button class="tab" data-tab="files">Files</button>
     </div>
 
-    <!-- Panels -->
     <div class="panel chat-panel active" data-panel="chat">
       <div class="chat-messages" id="chatMessages">
         <div class="msg assistant">
@@ -520,15 +626,99 @@
       </div>
     </div>
 
-    <div class="panel terminal-panel" data-panel="terminal" id="terminalPanel"></div>
+    <div class="panel terminal-panel" data-panel="terminal">
+      <div class="term-window">
+        <div class="mac-header">
+          <div class="mac-dots">
+            <div class="mac-dot close"></div>
+            <div class="mac-dot min"></div>
+            <div class="mac-dot max"></div>
+          </div>
+          <div class="mac-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Terminal
+            <div class="mac-status"><div class="status-dot"></div> Connected</div>
+          </div>
+          <div class="mac-actions">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </div>
+        </div>
+        
+        <div class="sys-info-bar">
+          <div class="sys-header">
+            <span>SYSTEM INFO</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </div>
+          <div class="sys-grid">
+            <div class="sys-item">
+              <div class="sys-item-top">
+                <div class="sys-label-wrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                  CPU
+                </div>
+                <span>8% • 2 cores</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill green" style="width: 8%"></div></div>
+            </div>
+            <div class="sys-item">
+              <div class="sys-item-top">
+                <div class="sys-label-wrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="2" ry="2"/><line x1="6" y1="7" x2="6" y2="17"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="7" x2="14" y2="17"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
+                  RAM
+                </div>
+                <span>1458MB / 1953MB</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill yellow" style="width: 74%"></div></div>
+            </div>
+            <div class="sys-item" style="grid-column: 1 / -1; max-width: 50%;">
+              <div class="sys-item-top">
+                <div class="sys-label-wrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                  Disk
+                </div>
+                <span>0.6GB / 20GB</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill green" style="width: 3%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="term-content-wrap" id="terminalPanel"></div>
+      </div>
+    </div>
 
     <div class="panel files-panel" data-panel="files">
-      <div class="file-breadcrumb" id="fileBreadcrumb"></div>
-      <div id="fileList"></div>
+      <div class="workspace-window">
+        <div class="ws-header">
+          <div class="ws-title-wrap">
+            <div class="ws-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="8 13 10 15 8 17"/><line x1="14" y1="17" x2="16" y2="17"/></svg>
+            </div>
+            <div class="ws-titles">
+              <h2>Workspace</h2>
+              <p>Edit your agent's configuration files</p>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--faint);cursor:pointer"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>
+        </div>
+        
+        <div class="ws-files-section">
+          <div class="ws-files-title">
+            FILES
+            <div class="actions">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+          <div class="file-breadcrumb" id="fileBreadcrumb"></div>
+          <div id="fileList"></div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Settings Drawer -->
   <div class="drawer-backdrop" id="drawerWrap">
     <div class="drawer">
       <div class="drawer-head">
@@ -549,7 +739,6 @@
     </div>
   </div>
 
-  <!-- File Viewer -->
   <div class="file-viewer" id="fileViewer">
     <div class="file-viewer-content">
       <div class="file-viewer-header">
@@ -1047,7 +1236,7 @@
     state.terminalInit = true;
     term = new Terminal({
       theme: {
-        background: '#11100f',
+        background: '#111111',
         foreground: '#f1ece6',
         cursor: '#8b7cff',
         cursorAccent: '#11100f',
@@ -1073,11 +1262,11 @@
     });
 
     new MutationObserver(() => {
-      if ($('terminalPanel').classList.contains('active')) {
+      if (document.querySelector('[data-panel="terminal"]').classList.contains('active')) {
         fitAddon.fit();
         socket.emit('resize', { cols: term.cols, rows: term.rows });
       }
-    }).observe($('terminalPanel'), { attributes: true });
+    }).observe(document.querySelector('[data-panel="terminal"]'), { attributes: true });
   }
 
   // ─── Files ───
@@ -1124,7 +1313,7 @@
     if (currentDir !== '/') {
       const upItem = document.createElement('div');
       upItem.className = 'file-item';
-      upItem.innerHTML = `<span class="file-item-icon">📁</span><span class="file-item-name">..</span>`;
+      upItem.innerHTML = `<span class="file-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="file-item-name">..</span>`;
       upItem.addEventListener('click', () => {
         const parent = currentDir.split('/').slice(0, -1).join('/') || '/';
         loadFiles(parent);
@@ -1137,12 +1326,19 @@
       return a.name.localeCompare(b.name);
     });
 
+    const folderSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+    const fileSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`;
+
     items.forEach(item => {
       const el = document.createElement('div');
       el.className = 'file-item';
-      const icon = item.type === 'directory' ? '📁' : '📄';
+      const icon = item.type === 'directory' ? folderSvg : fileSvg;
+      
+      // Setting colors based on type to match screenshot
+      const iconColor = item.type === 'directory' ? 'var(--warning)' : 'var(--muted)';
       const size = item.size != null ? formatSize(item.size) : '';
-      el.innerHTML = `<span class="file-item-icon">${icon}</span><span class="file-item-name">${escapeHtml(item.name)}</span><span class="file-item-size">${size}</span>`;
+      
+      el.innerHTML = `<span class="file-item-icon" style="color:${iconColor}">${icon}</span><span class="file-item-name">${escapeHtml(item.name)}</span><span class="file-item-size">${size}</span>`;
       el.addEventListener('click', () => {
         if (item.type === 'directory') loadFiles(item.path);
         else viewFile(item.path, item.name);
