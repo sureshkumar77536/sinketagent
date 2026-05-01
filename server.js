@@ -372,12 +372,34 @@ app.post('/api/chat', async (req, res) => {
       });
 
       if (!response.ok) {
-        const errText = await response.text();
-        let msg = errText;
-        try { msg = JSON.parse(errText).error?.message || msg; } catch {}
-        sendEvent('error', { message: `API Error (${response.status}): ${msg}` });
-        break;
+        // If 401 and we sent a token, retry without token
+        if (response.status === 401 && headers['Authorization']) {
+          delete headers['Authorization'];
+          const retryResponse = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(apiBody)
+          });
+          if (retryResponse.ok) {
+            // Use retry response instead
+            Object.defineProperty(response, '_retryResponse', { value: retryResponse });
+          } else {
+            const errText = await response.text();
+            let msg = errText;
+            try { msg = JSON.parse(errText).error?.message || msg; } catch {}
+            sendEvent('error', { message: `API Error (${response.status}): ${msg}` });
+            break;
+          }
+        } else {
+          const errText = await response.text();
+          let msg = errText;
+          try { msg = JSON.parse(errText).error?.message || msg; } catch {}
+          sendEvent('error', { message: `API Error (${response.status}): ${msg}` });
+          break;
+        }
       }
+
+      const activeResponse = response._retryResponse || response;
 
       if (provider.streaming !== false) {
         // ─── Streaming Response ───
@@ -385,7 +407,7 @@ app.post('/api/chat', async (req, res) => {
         const toolCalls = {};
         let finishReason = '';
 
-        const reader = response.body;
+        const reader = activeResponse.body;
         const decoder = new TextDecoder();
         let buffer = '';
 
@@ -494,7 +516,7 @@ app.post('/api/chat', async (req, res) => {
 
       } else {
         // ─── Non-Streaming Response ───
-        const json = await response.json();
+        const json = await activeResponse.json();
         const choice = json.choices?.[0];
 
         if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
