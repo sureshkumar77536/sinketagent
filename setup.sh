@@ -53,7 +53,8 @@ echo -e "${BOLD}Configure your OpenAI-compatible API provider:${NC}"
 echo ""
 
 read -p "  API Base URL (e.g., https://api.openai.com/v1): " API_URL
-read -p "  Model Name (e.g., gpt-4, deepseek-chat): " MODEL_NAME
+read -p "  Model Name (e.g., gpt-4, deepseek-chat, anthropic/claude-sonnet-4): " MODEL_NAME
+echo -e "  ${YELLOW}(Leave empty if your API proxy doesn't require a key)${NC}"
 read -sp "  API Token: " API_TOKEN
 echo ""
 
@@ -156,6 +157,9 @@ echo "  ║      Starting Sinket Code...         ║"
 echo "  ╚══════════════════════════════════════╝"
 echo -e "${NC}"
 
+# Create data directory
+mkdir -p data
+
 # Create start script
 cat > start.sh << 'STARTEOF'
 #!/bin/bash
@@ -167,6 +171,10 @@ PORT=$(node -e "try{console.log(require('./config.json').port||3000)}catch{conso
 pkill -f "node server.js" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
+
+# Auto-sync from GitHub on start
+echo "Checking for updates from GitHub..."
+git pull origin $(git rev-parse --abbrev-ref HEAD) 2>/dev/null && npm install --production 2>/dev/null
 
 # Start Node server
 echo "Starting Sinket Code server on port $PORT..."
@@ -184,8 +192,14 @@ TUNNEL_PID=$!
 echo "Tunnel PID: $TUNNEL_PID"
 
 # Wait for tunnel URL
-sleep 5
+sleep 8
 TUNNEL_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
+
+# Save tunnel URL to database
+if [ -n "$TUNNEL_URL" ]; then
+    mkdir -p data
+    echo "{\"url\":\"$TUNNEL_URL\",\"lastUpdate\":$(date +%s)000}" > data/tunnel.json
+fi
 
 echo ""
 echo -e "\033[0;35m\033[1m"
@@ -201,25 +215,33 @@ echo "  ║                                                      ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "\033[0m"
 
-# Keep alive
+# Keep alive - ALWAYS running, never stops
 echo "Sinket Code is running. Press Ctrl+C to stop."
 echo "Server log: server.log | Tunnel log: tunnel.log"
 
-# Keep-alive loop
+# Keep-alive loop (runs forever)
 while true; do
     # Check if server is still running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "Server crashed. Restarting..."
+        echo "$(date): Server crashed. Restarting..."
         nohup node server.js > server.log 2>&1 &
         SERVER_PID=$!
     fi
     # Check if tunnel is still running
     if ! kill -0 $TUNNEL_PID 2>/dev/null; then
-        echo "Tunnel crashed. Restarting..."
+        echo "$(date): Tunnel crashed. Restarting..."
         nohup cloudflared tunnel --url http://localhost:$PORT > tunnel.log 2>&1 &
         TUNNEL_PID=$!
+        sleep 8
+        NEW_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
+        if [ -n "$NEW_URL" ]; then
+            mkdir -p data
+            echo "{\"url\":\"$NEW_URL\",\"lastUpdate\":$(date +%s)000}" > data/tunnel.json
+        fi
     fi
-    sleep 30
+    # Ping server to keep it alive
+    curl -s http://localhost:$PORT/api/health > /dev/null 2>&1
+    sleep 15
 done
 STARTEOF
 chmod +x start.sh

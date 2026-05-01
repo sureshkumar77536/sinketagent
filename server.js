@@ -9,14 +9,42 @@ const multer = require('multer');
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const WORKSPACE = path.join(__dirname, 'workspace');
 const UPLOADS = path.join(__dirname, 'uploads');
+const DATA_DIR = path.join(__dirname, 'data');
 
 if (!fs.existsSync(WORKSPACE)) fs.mkdirSync(WORKSPACE, { recursive: true });
 if (!fs.existsSync(UPLOADS)) fs.mkdirSync(UPLOADS, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// ─── JSON File Database ───
+class JsonDB {
+  constructor(name) {
+    this.path = path.join(DATA_DIR, `${name}.json`);
+    this.data = this._load();
+  }
+  _load() {
+    try {
+      if (fs.existsSync(this.path)) return JSON.parse(fs.readFileSync(this.path, 'utf-8'));
+    } catch {}
+    return {};
+  }
+  _save() {
+    fs.writeFileSync(this.path, JSON.stringify(this.data, null, 2));
+  }
+  get(key, fallback = null) { return this.data[key] !== undefined ? this.data[key] : fallback; }
+  set(key, value) { this.data[key] = value; this._save(); }
+  getAll() { return this.data; }
+  delete(key) { delete this.data[key]; this._save(); }
+}
+
+const chatDB = new JsonDB('chats');
+const filesDB = new JsonDB('ai_files');
+const tunnelDB = new JsonDB('tunnel');
+const metaDB = new JsonDB('meta');
 
 function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-  } catch (e) {}
+  } catch {}
   return {
     providers: [],
     activeProvider: 0,
@@ -33,7 +61,12 @@ function saveConfig(cfg) {
 let config = loadConfig();
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, {
+  cors: { origin: '*' },
+  pingTimeout: 120000,
+  pingInterval: 15000,
+  transports: ['websocket', 'polling']
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -86,18 +119,28 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   res.json({ url: `/uploads/${newName}`, filename: req.file.originalname });
 });
 
-// ─── File Browser ───
+// ─── File Browser (AI-created files only in workspace mode) ───
 app.get('/api/files', (req, res) => {
   const dir = req.query.path || WORKSPACE;
+  const onlyAiFiles = req.query.aiOnly === 'true';
   const safePath = path.resolve(dir);
   try {
     const items = fs.readdirSync(safePath, { withFileTypes: true });
-    const result = items.map(item => ({
+    let result = items.map(item => ({
       name: item.name,
       type: item.isDirectory() ? 'directory' : 'file',
       path: path.join(safePath, item.name),
       size: item.isFile() ? fs.statSync(path.join(safePath, item.name)).size : null
     }));
+
+    if (onlyAiFiles && safePath.startsWith(WORKSPACE)) {
+      const aiFiles = filesDB.get('created', []);
+      result = result.filter(item => {
+        if (item.type === 'directory') return true;
+        return aiFiles.some(f => item.path === f || item.path.startsWith(f));
+      });
+    }
+
     res.json({ path: safePath, items: result });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -115,6 +158,48 @@ app.get('/api/files/read', (req, res) => {
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
+});
+
+// ─── Chat History API ───
+app.get('/api/chats', (req, res) => {
+  const chats = chatDB.get('sessions', []);
+  res.json({ chats });
+});
+
+app.post('/api/chats/save', (req, res) => {
+  const { chatId, messages, title } = req.body;
+  const sessions = chatDB.get('sessions', []);
+  const idx = sessions.findIndex(s => s.id === chatId);
+  const session = {
+    id: chatId || Date.now().toString(),
+    title: title || 'Chat ' + new Date().toLocaleString(),
+    messages: messages || [],
+    updatedAt: Date.now()
+  };
+  if (idx >= 0) sessions[idx] = session;
+  else sessions.push(session);
+  chatDB.set('sessions', sessions);
+  res.json({ ok: true, chatId: session.id });
+});
+
+app.delete('/api/chats/:id', (req, res) => {
+  const sessions = chatDB.get('sessions', []);
+  const filtered = sessions.filter(s => s.id !== req.params.id);
+  chatDB.set('sessions', filtered);
+  res.json({ ok: true });
+});
+
+// ─── Tunnel URL API ───
+app.get('/api/tunnel', (req, res) => {
+  const url = tunnelDB.get('url', '');
+  const lastUpdate = tunnelDB.get('lastUpdate', null);
+  res.json({ url, lastUpdate });
+});
+
+// ─── AI Files Tracking ───
+app.get('/api/ai-files', (req, res) => {
+  const files = filesDB.get('created', []);
+  res.json({ files });
 });
 
 // ─── Execute Command (for AI agent) ───
@@ -156,6 +241,12 @@ async function executeTool(name, args) {
         const dir = path.dirname(p);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(p, args.content);
+        // Track AI-created files
+        const aiFiles = filesDB.get('created', []);
+        if (!aiFiles.includes(p)) {
+          aiFiles.push(p);
+          filesDB.set('created', aiFiles);
+        }
         return `File written: ${p}`;
       } catch (e) { return `Error: ${e.message}`; }
     }
@@ -353,7 +444,6 @@ app.post('/api/chat', async (req, res) => {
         stream: provider.streaming !== false
       };
 
-      // Send native tools only on first attempt if not flagged
       if (config.terminalAccess !== false && loopCount === 1 && !toolsFallbackMode) {
         apiBody.tools = AI_TOOLS;
         apiBody.tool_choice = 'auto';
@@ -363,7 +453,10 @@ app.post('/api/chat', async (req, res) => {
       const url = `${baseUrl}/chat/completions`;
 
       const headers = { 'Content-Type': 'application/json' };
-      if (provider.token) headers['Authorization'] = `Bearer ${provider.token}`;
+      // Support empty API keys - only add Authorization if token exists
+      if (provider.token && provider.token.trim()) {
+        headers['Authorization'] = `Bearer ${provider.token}`;
+      }
 
       const response = await fetch(url, {
         method: 'POST',
@@ -375,6 +468,25 @@ app.post('/api/chat', async (req, res) => {
         const errText = await response.text();
         let msg = errText;
         try { msg = JSON.parse(errText).error?.message || msg; } catch {}
+
+        // If tools caused the error, retry without tools
+        if (loopCount === 1 && !toolsFallbackMode && apiBody.tools) {
+          toolsFallbackMode = true;
+          allMessages.length = 0;
+          allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages);
+          if (imageUrl) {
+            const lastMsg = allMessages[allMessages.length - 1];
+            if (lastMsg.role === 'user') {
+              lastMsg.content = [
+                { type: 'text', text: typeof lastMsg.content === 'string' ? lastMsg.content : '' },
+                { type: 'image_url', image_url: { url: imageUrl } }
+              ];
+            }
+          }
+          loopCount = 0;
+          continue;
+        }
+
         sendEvent('error', { message: `API Error (${response.status}): ${msg}` });
         break;
       }
@@ -468,11 +580,8 @@ app.post('/api/chat', async (req, res) => {
             continue;
           }
 
-          // Detect: native tools sent but model didn't use them → retry in fallback mode
           if (loopCount === 1 && !toolsFallbackMode && apiBody.tools) {
             toolsFallbackMode = true;
-            allMessages.pop(); // remove the system prompt re-add
-            // Reset messages to original + strip the failed assistant response
             allMessages.length = 0;
             allMessages.push({ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT_EXAMPLES, ...messages);
             if (imageUrl) {
@@ -548,8 +657,16 @@ try {
 }
 
 io.on('connection', (socket) => {
+  // Heartbeat - keep connection alive
+  const heartbeat = setInterval(() => {
+    socket.emit('heartbeat', { ts: Date.now() });
+  }, 10000);
+
+  socket.on('heartbeat_ack', () => {});
+
   if (!config.terminalAccess) {
     socket.emit('output', 'Terminal access is disabled.\r\n');
+    socket.on('disconnect', () => clearInterval(heartbeat));
     return;
   }
 
@@ -567,7 +684,10 @@ io.on('connection', (socket) => {
 
     socket.on('input', (data) => shell.write(data));
     socket.on('resize', ({ cols, rows }) => shell.resize(cols, rows));
-    socket.on('disconnect', () => shell.kill());
+    socket.on('disconnect', () => {
+      clearInterval(heartbeat);
+      shell.kill();
+    });
   } else {
     socket.emit('output', 'Welcome to Sinket Code Terminal\r\n$ ');
     let cwd = WORKSPACE;
@@ -622,6 +742,8 @@ io.on('connection', (socket) => {
         socket.emit('output', data);
       }
     });
+
+    socket.on('disconnect', () => clearInterval(heartbeat));
   }
 });
 
@@ -634,31 +756,75 @@ app.post('/api/webhook/update', (req, res) => {
   }, (error, stdout, stderr) => {
     if (error) {
       console.error('Auto-update failed:', error.message);
+      metaDB.set('lastSyncError', error.message);
+      metaDB.set('lastSyncAt', Date.now());
       return;
     }
     console.log('Auto-update done:', stdout);
+    metaDB.set('lastSyncAt', Date.now());
+    metaDB.set('lastSyncStatus', 'success');
+    metaDB.set('lastSyncOutput', stdout);
     console.log('Restarting server...');
-    process.exit(0); // keep-alive script will restart
+    process.exit(0);
   });
 });
 
-// ─── Manual Update Check ───
+// ─── Manual Update / Sync Check ───
 app.get('/api/update', (req, res) => {
   const appDir = __dirname;
   exec(`cd "${appDir}" && git pull origin $(git rev-parse --abbrev-ref HEAD) && npm install --production`, {
     timeout: 60000
   }, (error, stdout, stderr) => {
     if (error) {
+      metaDB.set('lastSyncError', error.message);
+      metaDB.set('lastSyncAt', Date.now());
       res.json({ status: 'error', message: error.message });
       return;
     }
+    metaDB.set('lastSyncAt', Date.now());
+    metaDB.set('lastSyncStatus', 'success');
     res.json({ status: 'updated', output: stdout });
-    setTimeout(() => process.exit(0), 1000); // restart after response
+    setTimeout(() => process.exit(0), 1000);
   });
 });
 
-// ─── Keep Alive ───
-setInterval(() => {}, 30000);
+// ─── Sync Status ───
+app.get('/api/sync-status', (req, res) => {
+  res.json({
+    lastSyncAt: metaDB.get('lastSyncAt', null),
+    lastSyncStatus: metaDB.get('lastSyncStatus', null),
+    lastSyncError: metaDB.get('lastSyncError', null),
+    tunnelUrl: tunnelDB.get('url', '')
+  });
+});
+
+// ─── Health / Keep Alive ───
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'alive', uptime: process.uptime(), timestamp: Date.now() });
+});
+
+// ─── Keep Alive - prevent process from sleeping ───
+setInterval(() => {
+  // Active heartbeat to keep Node.js event loop alive
+  metaDB.set('lastHeartbeat', Date.now());
+}, 30000);
+
+// ─── Startup: Auto-sync from GitHub ───
+(function startupSync() {
+  const appDir = __dirname;
+  exec(`cd "${appDir}" && git remote get-url origin 2>/dev/null`, { timeout: 5000 }, (err, stdout) => {
+    if (!err && stdout.trim()) {
+      console.log('Startup: Checking for updates from GitHub...');
+      exec(`cd "${appDir}" && git pull origin $(git rev-parse --abbrev-ref HEAD) 2>&1`, { timeout: 30000 }, (error, pullOut) => {
+        if (!error) {
+          console.log('Startup sync:', pullOut.trim());
+          metaDB.set('lastSyncAt', Date.now());
+          metaDB.set('lastSyncStatus', 'success');
+        }
+      });
+    }
+  });
+})();
 
 // ─── Start Server ───
 const PORT = config.port || process.env.PORT || 3000;
