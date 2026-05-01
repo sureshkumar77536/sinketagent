@@ -53,7 +53,7 @@ echo -e "${BOLD}Configure your OpenAI-compatible API provider:${NC}"
 echo ""
 
 read -p "  API Base URL (e.g., https://api.openai.com/v1): " API_URL
-read -p "  Model Name (e.g., gpt-4, deepseek-chat, anthropic/claude-sonnet-4): " MODEL_NAME
+read -p "  Model Name (e.g., gpt-4, deepseek-chat, claude-3-opus): " MODEL_NAME
 echo -e "  ${YELLOW}(Leave empty if your API proxy doesn't require a key)${NC}"
 read -sp "  API Token: " API_TOKEN
 echo ""
@@ -216,32 +216,40 @@ echo "  ╚═══════════════════════
 echo -e "\033[0m"
 
 # Keep alive - ALWAYS running, never stops
-echo "Sinket Code is running. Press Ctrl+C to stop."
+echo "Sinket Code is running PERMANENTLY. Press Ctrl+C to stop."
 echo "Server log: server.log | Tunnel log: tunnel.log"
 
-# Keep-alive loop (runs forever)
+# Trap SIGTERM/SIGINT for clean shutdown
+trap "echo 'Shutting down...'; kill $SERVER_PID $TUNNEL_PID 2>/dev/null; exit 0" SIGTERM SIGINT
+
+RESTART_COUNT=0
+
+# Keep-alive loop (runs forever - no inactivity stop)
 while true; do
     # Check if server is still running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "$(date): Server crashed. Restarting..."
-        nohup node server.js > server.log 2>&1 &
+        RESTART_COUNT=$((RESTART_COUNT + 1))
+        echo "$(date): Server crashed (restart #$RESTART_COUNT). Restarting..."
+        nohup node server.js >> server.log 2>&1 &
         SERVER_PID=$!
+        sleep 3
     fi
     # Check if tunnel is still running
     if ! kill -0 $TUNNEL_PID 2>/dev/null; then
         echo "$(date): Tunnel crashed. Restarting..."
         nohup cloudflared tunnel --url http://localhost:$PORT > tunnel.log 2>&1 &
         TUNNEL_PID=$!
-        sleep 8
-        NEW_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
+        sleep 10
+        NEW_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' tunnel.log | tail -1)
         if [ -n "$NEW_URL" ]; then
             mkdir -p data
             echo "{\"url\":\"$NEW_URL\",\"lastUpdate\":$(date +%s)000}" > data/tunnel.json
+            echo "$(date): New tunnel URL: $NEW_URL"
         fi
     fi
-    # Ping server to keep it alive
-    curl -s http://localhost:$PORT/api/health > /dev/null 2>&1
-    sleep 15
+    # Ping server to keep it alive and prevent any idle timeout
+    curl -s http://localhost:$PORT/api/health > /dev/null 2>&1 || true
+    sleep 10
 done
 STARTEOF
 chmod +x start.sh

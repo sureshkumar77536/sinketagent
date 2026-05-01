@@ -52,7 +52,7 @@ bash setup.sh
 
 The setup wizard will ask you:
 1. **API Base URL** — Your OpenAI-compatible API endpoint (e.g., `https://api.openai.com/v1`)
-2. **Model Name** — Model to use (e.g., `gpt-4`, `deepseek-chat`, `anthropic/claude-sonnet-4`)
+2. **Model Name** — Model to use (e.g., `gpt-4`, `deepseek-chat`)
 3. **API Token** — Your API key (leave empty if proxy doesn't need one)
 4. **Enable Streaming** — Yes/No (recommended: Yes)
 5. **Terminal Access** — Grant AI terminal access (required)
@@ -122,9 +122,9 @@ Click the **☰ Menu** button in the top-left to access:
       "streaming": true
     },
     {
-      "name": "Claude Proxy",
-      "baseUrl": "http://185.14.92.127:3001/api/openai/v1",
-      "model": "anthropic/claude-sonnet-4",
+      "name": "Custom Proxy",
+      "baseUrl": "https://your-proxy-url/v1",
+      "model": "your-model-name",
       "token": "",
       "streaming": true
     }
@@ -179,7 +179,7 @@ The AI has access to these tools via function calling:
 
 Any OpenAI-compatible API works:
 - **OpenAI** (`https://api.openai.com/v1`)
-- **Anthropic (via proxy)** (`http://your-proxy/api/openai/v1` with `anthropic/claude-sonnet-4`)
+- **Custom Proxy** (any OpenAI-compatible proxy, with or without API key)
 - **DeepSeek** (`https://api.deepseek.com/v1`)
 - **Together AI** (`https://api.together.xyz/v1`)
 - **Groq** (`https://api.groq.com/openai/v1`)

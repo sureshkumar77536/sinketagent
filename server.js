@@ -6,6 +6,14 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
+// ─── Prevent crashes from killing the server ───
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err.message);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err?.message || err);
+});
+
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const WORKSPACE = path.join(__dirname, 'workspace');
 const UPLOADS = path.join(__dirname, 'uploads');
@@ -89,6 +97,7 @@ app.get('/api/config', (req, res) => {
       name: p.name,
       baseUrl: p.baseUrl,
       model: p.model,
+      token: p.token || '',
       hasToken: !!p.token,
       streaming: p.streaming !== false
     })),
@@ -422,10 +431,23 @@ app.post('/api/chat', async (req, res) => {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no'
   });
+  res.flushHeaders();
+
+  let sseAlive = true;
+  res.on('close', () => { sseAlive = false; });
 
   const sendEvent = (type, data) => {
-    res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (!sseAlive) return;
+    try {
+      res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch {}
   };
+
+  // SSE keepalive ping every 15s to prevent Cloudflare 502 timeout
+  const sseKeepalive = setInterval(() => {
+    if (!sseAlive) { clearInterval(sseKeepalive); return; }
+    try { res.write(': keepalive\n\n'); } catch {}
+  }, 15000);
 
   const allMessages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -448,7 +470,7 @@ app.post('/api/chat', async (req, res) => {
   let toolsFallbackMode = false;
 
   try {
-    while (loopCount < MAX_LOOPS) {
+    while (loopCount < MAX_LOOPS && sseAlive) {
       loopCount++;
       sendEvent('status', { type: 'thinking' });
 
@@ -474,11 +496,27 @@ app.post('/api/chat', async (req, res) => {
         headers['Authorization'] = `Bearer ${provider.token}`;
       }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(apiBody)
-      });
+      const fetchController = new AbortController();
+      const fetchTimeout = setTimeout(() => fetchController.abort(), 120000);
+
+      let response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(apiBody),
+          signal: fetchController.signal
+        });
+      } catch (fetchErr) {
+        clearTimeout(fetchTimeout);
+        if (fetchErr.name === 'AbortError') {
+          sendEvent('error', { message: 'API request timed out (120s). Check your API provider.' });
+        } else {
+          sendEvent('error', { message: `Connection failed: ${fetchErr.message}` });
+        }
+        break;
+      }
+      clearTimeout(fetchTimeout);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -662,6 +700,7 @@ app.post('/api/chat', async (req, res) => {
     sendEvent('error', { message: err.message || 'Unknown error' });
   }
 
+  clearInterval(sseKeepalive);
   sendEvent('done', {});
   res.end();
 });
@@ -844,8 +883,20 @@ setInterval(() => {
   });
 })();
 
+// ─── Express Error Handler ───
+app.use((err, req, res, next) => {
+  console.error('Express error:', err.message);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── Start Server ───
 const PORT = config.port || process.env.PORT || 3000;
+server.keepAliveTimeout = 120000;
+server.headersTimeout = 125000;
+server.timeout = 0;
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  ╔══════════════════════════════════════╗`);
   console.log(`  ║        🚀 Sinket Code Running        ║`);
